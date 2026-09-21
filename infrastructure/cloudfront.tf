@@ -7,7 +7,7 @@ locals {
   # AWS managed policies (stable IDs).
   cache_policy_optimized    = "658327ea-f89d-4fab-a63d-7e88639e58f6" # CachingOptimized
   cache_policy_disabled     = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad" # CachingDisabled
-  origin_request_policy_all = "216adef6-5c7f-47e4-b989-5492eafa07d3" # AllViewer
+  origin_request_policy_all = "b689b0a8-53d0-40ab-baf2-68738e2966ac" # AllViewerExceptHostHeader
 }
 
 resource "aws_cloudfront_distribution" "albums" {
@@ -90,9 +90,8 @@ resource "aws_cloudfront_distribution" "albums" {
     origin_request_policy_id = local.origin_request_policy_all
   }
 
-  # Comment routes. Every request is a distinct action, so nothing is cached,
-  # and the AllViewer origin request policy forwards the Cookie header that
-  # comments-api checks.
+  # Comment routes. Nothing is cached, and the origin request policy forwards
+  # the Cookie header that comments-api checks.
   ordered_cache_behavior {
     path_pattern             = "/api/*"
     allowed_methods          = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
@@ -107,7 +106,7 @@ resource "aws_cloudfront_distribution" "albums" {
   # public login page instead of a raw AWS error.
   custom_error_response {
     error_code            = 403
-    response_code         = 200
+    response_code         = 403
     response_page_path    = "/login.html"
     error_caching_min_ttl = 0
   }

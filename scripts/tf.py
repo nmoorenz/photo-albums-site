@@ -1,17 +1,32 @@
 #!/usr/bin/env python3
-"""Run terraform with the values from .env.
-
-Loads .env, maps each value to the TF_VAR_* environment variable Terraform
-expects, adds -chdir for the infrastructure directory, and passes every other
-argument straight through.
+"""Run terraform with the deployment's variables taken from .env.
 
     python scripts/tf.py init
+    python scripts/tf.py cert     stage one: the certificate, then its DNS record
     python scripts/tf.py plan
     python scripts/tf.py apply
-    python scripts/tf.py output -raw cloudfront_domain_name
+    python scripts/tf.py output cloudfront_domain_name
 
-Required values are listed in REQUIRED below; a missing one stops here with a
-message rather than letting Terraform prompt or build something half-named.
+Everything after the script name is passed straight through, so any terraform
+command works. `-chdir=infrastructure` is added for you.
+
+`cert` is the exception: it runs the first-stage targeted apply and then
+prints the validation record, so there is no -target=type.name argument to
+get mangled by the shell (PowerShell drops the part after the dot).
+
+.env is the one place a deployment's own names live, and it is gitignored.
+A terraform.tfvars or *.auto.tfvars file would override it without saying so,
+so this script refuses to run while one exists.
+This maps it to the TF_VAR_* variables terraform looks for:
+
+    S3_BUCKET              -> TF_VAR_bucket_name
+    DOMAIN_NAME            -> TF_VAR_domain_name
+    COGNITO_DOMAIN_PREFIX  -> TF_VAR_cognito_domain_prefix
+    AWS_REGION             -> TF_VAR_aws_region
+    AWS_PROFILE            -> TF_VAR_aws_profile
+
+Any missing Lambda bundle is built first, since terraform reads the
+archive_file data sources during plan.
 
 Set TERRAFORM to use a binary other than `terraform` on PATH.
 
@@ -19,7 +34,6 @@ Keep this file ASCII-only.
 """
 
 import os
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -28,76 +42,108 @@ from dotenv import dotenv_values
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 ENV_FILE = REPO_ROOT / ".env"
-EXAMPLE_ENV = REPO_ROOT / "env.example"
-TERRAFORM_DIR = REPO_ROOT / "infrastructure"
-TERRAFORM = os.environ.get("TERRAFORM", "terraform")
+TF_DIR = REPO_ROOT / "infrastructure"
+LAMBDA_DIR = TF_DIR / "lambda"
+BUILD_DIR = TF_DIR / "build"
 
-# .env name -> Terraform variable name.
-REQUIRED = {
-    "S3_BUCKET": "bucket_name",
-    "DOMAIN_NAME": "domain_name",
-    "AWS_PROFILE": "aws_profile",
-    "COGNITO_DOMAIN_PREFIX": "cognito_domain_prefix",
-}
-
-# Optional: these have defaults in variables.tf and terraform.tfvars. Setting
-# them in .env overrides those.
-OPTIONAL = {
-    "AWS_REGION": "aws_region",
-}
+# env var -> terraform variable, and whether the deployment needs it set
+MAPPING = [
+    ("S3_BUCKET", "bucket_name", True),
+    ("DOMAIN_NAME", "domain_name", True),
+    ("COGNITO_DOMAIN_PREFIX", "cognito_domain_prefix", True),
+    ("AWS_REGION", "aws_region", False),
+    ("AWS_PROFILE", "aws_profile", False),
+]
 
 
-def die(message):
-    print("ERROR: %s" % message, file=sys.stderr)
-    raise SystemExit(1)
+def ensure_lambda_bundles():
+    """Build any Lambda bundle that is missing.
+
+    Terraform reads the archive_file data sources during plan, so a missing
+    build directory stops even a targeted apply.
+    """
+    missing = [d.name for d in sorted(LAMBDA_DIR.iterdir())
+               if d.is_dir() and not (BUILD_DIR / d.name).is_dir()]
+    if not missing:
+        return True
+
+    print("building Lambda bundle(s): %s" % ", ".join(missing))
+    result = subprocess.call([sys.executable, str(Path(__file__).with_name("build_lambdas.py"))])
+    if result != 0:
+        print("ERROR: scripts/build_lambdas.py failed -- fix that before running terraform.",
+              file=sys.stderr)
+        return False
+    return True
 
 
-def load_env():
-    if not ENV_FILE.exists():
-        die("No .env at %s -- copy %s there and fill it in."
-            % (ENV_FILE, EXAMPLE_ENV.name))
+CERT_RESOURCE = "aws_acm_certificate.albums"
 
-    values = {k: v for k, v in dotenv_values(ENV_FILE).items() if v not in (None, "")}
-
-    missing = [name for name in REQUIRED if name not in values]
-    if missing:
-        die("Missing in .env: %s\n       See %s for what each one is."
-            % (", ".join(sorted(missing)), EXAMPLE_ENV.name))
-
-    placeholders = [name for name in REQUIRED if is_placeholder(values[name])]
-    if placeholders:
-        die("Still on the example values in .env: %s\n       See %s."
-            % (", ".join(sorted(placeholders)), EXAMPLE_ENV.name))
-
-    return values
+# terraform.tfvars and *.auto.tfvars are loaded automatically and OUTRANK the
+# TF_VAR_* environment variables this script sets, so one of them can
+# silently override .env. There should not be one.
+TFVARS_GLOBS = ["terraform.tfvars", "terraform.tfvars.json", "*.auto.tfvars",
+                "*.auto.tfvars.json"]
 
 
-def is_placeholder(value):
-    lowered = value.strip().lower()
-    return (lowered.startswith("your-")
-            or lowered in ("change-me", "default-changeme")
-            or "example.com" in lowered)
+def check_no_tfvars():
+    found = sorted({p for glob in TFVARS_GLOBS for p in TF_DIR.glob(glob)})
+    if not found:
+        return True
+    print("ERROR: %s in %s." % (", ".join(p.name for p in found), TF_DIR),
+          file=sys.stderr)
+    print("Terraform loads these automatically and they override the values "
+          "this script\npasses from .env, silently. Delete them and set "
+          "everything in .env instead.", file=sys.stderr)
+    return False
 
 
-def main(argv):
-    if not argv:
+def run(terraform, env, args):
+    return subprocess.call([terraform, "-chdir=%s" % TF_DIR] + args, env=env)
+
+
+def main():
+    args = sys.argv[1:]
+    if not args:
         print(__doc__)
         return 2
 
-    # Config problems first: they are the common case and the fixable one.
-    values = load_env()
+    if not ENV_FILE.exists():
+        print("ERROR: no .env -- copy env.example to .env and fill it in.", file=sys.stderr)
+        return 1
 
-    if not shutil.which(TERRAFORM):
-        die("%s is not on PATH -- install Terraform >= 1.6 and try again." % TERRAFORM)
-
+    values = dotenv_values(ENV_FILE)
     env = os.environ.copy()
-    for source, target in {**REQUIRED, **OPTIONAL}.items():
-        if source in values:
-            env["TF_VAR_%s" % target] = values[source]
+    missing = []
 
-    command = [TERRAFORM, "-chdir=%s" % TERRAFORM_DIR] + argv
-    return subprocess.call(command, env=env)
+    for key, tf_name, required in MAPPING:
+        value = (values.get(key) or os.environ.get(key) or "").strip()
+        if value:
+            env["TF_VAR_" + tf_name] = value
+        elif required:
+            missing.append(key)
+
+    if missing:
+        print("ERROR: .env is missing %s -- see env.example." % ", ".join(missing),
+              file=sys.stderr)
+        return 1
+
+    if not check_no_tfvars():
+        return 1
+
+    if not ensure_lambda_bundles():
+        return 1
+
+    terraform = env.get("TERRAFORM", "terraform")
+
+    if args == ["cert"]:
+        result = run(terraform, env, ["apply", "-target=" + CERT_RESOURCE])
+        if result != 0:
+            return result
+        print("\nAdd this CNAME at your registrar, then run: python scripts/tf.py apply\n")
+        return run(terraform, env, ["output", "acm_validation_records"])
+
+    return run(terraform, env, args)
 
 
 if __name__ == "__main__":
-    raise SystemExit(main(sys.argv[1:]))
+    raise SystemExit(main())

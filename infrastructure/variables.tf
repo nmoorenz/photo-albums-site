@@ -1,19 +1,16 @@
-# Deployment-specific values have NO default: an incomplete config fails
-# before anything is created. They come from .env via scripts/tf.py, which
-# exports them as TF_VAR_*.
-#
-# Non-identifying values keep defaults and live in terraform.tfvars, which is
-# committed.
+# Values that identify a particular deployment have no defaults: set them in
+# terraform.tfvars, which is gitignored. See terraform.tfvars.example.
 
 variable "aws_profile" {
-  description = "AWS CLI profile to deploy with. .env: AWS_PROFILE"
+  description = "AWS CLI profile to use"
   type        = string
+  default     = "default"
 }
 
 variable "aws_region" {
-  description = "Region for S3 / Cognito / Lambda"
+  description = "Region for S3, Cognito and the Lambdas. Must support Lambda function URLs -- ap-southeast-6 does not."
   type        = string
-  default     = "ap-southeast-6"
+  default     = "ap-southeast-2"
 }
 
 variable "bucket_name" {

@@ -36,6 +36,10 @@ async function api(path, options) {
 
 async function loadManifest() {
   const resp = await fetch(MANIFEST_URL, { credentials: 'same-origin', cache: 'no-cache' });
+  if (resp.status === 401 || resp.status === 403) {
+    window.location.href = '/login.html';
+    throw new Error('not logged in');
+  }
   if (!resp.ok) throw new Error('Could not load the albums (' + resp.status + ')');
   const manifest = await resp.json();
   state.albums = manifest.albums || [];

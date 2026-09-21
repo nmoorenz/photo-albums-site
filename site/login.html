@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Log in - Photo Albums</title>
-<link rel="stylesheet" href="style.css" />
+<link rel="stylesheet" href="/style.css" />
 </head>
 <body class="login-body">
   <div class="login-panel">
@@ -13,7 +13,7 @@
     <button id="login-button">Log in</button>
   </div>
   <script type="module">
-    import { COGNITO_DOMAIN, COGNITO_CLIENT_ID, REDIRECT_URI } from './config.js';
+    import { COGNITO_DOMAIN, COGNITO_CLIENT_ID, REDIRECT_URI } from '/config.js';
     const btn = document.getElementById('login-button');
     if (!COGNITO_DOMAIN || !COGNITO_CLIENT_ID) {
       btn.textContent = 'Login is not configured yet';

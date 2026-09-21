@@ -1,26 +1,27 @@
 # infrastructure
 
-Terraform for the whole stack.
+Terraform for the whole stack, all in one region.
 
-Run it through `scripts/tf.py`, which passes everything through to terraform
-with `-chdir=infrastructure` and feeds it the deployment's own names from
-`.env` as `TF_VAR_*`:
+`aws_region` defaults to `ap-southeast-2`. The region must support Lambda
+function URLs. `ap-southeast-6` does not.
 
-```
-python scripts/tf.py init
-python scripts/tf.py plan
-python scripts/tf.py apply
-python scripts/tf.py output cloudfront_domain_name
-```
+Run every terraform command through `scripts/tf.py`, from the repo root. It
+passes its arguments straight through, adds `-chdir=infrastructure`, and
+feeds terraform the deployment's own names from `.env` as `TF_VAR_*`.
 
-`bucket_name`, `domain_name` and `cognito_domain_prefix` have no defaults, so
-a missing or incomplete `.env` fails before anything is created.
-`terraform.tfvars` is committed and holds only `project_tag`.
+`bucket_name`, `domain_name` and `cognito_domain_prefix` have no defaults;
+an incomplete `.env` stops the run. Everything else defaults in
+`variables.tf`.
+
+There is no `terraform.tfvars`, and `tf.py` will not run while one exists.
+Set values in `.env`, or change a default in `variables.tf`.
+
+`tf.py` builds any missing Lambda bundle before calling terraform.
 
 ## What it builds
 
-One S3 bucket and one CloudFront distribution serve everything, so the
-Cognito cookies stay first-party:
+One S3 bucket and one CloudFront distribution serve everything. The Cognito
+cookies are first-party.
 
 | behaviour | origin | notes |
 | --- | --- | --- |
@@ -29,8 +30,7 @@ Cognito cookies stay first-party:
 | `/auth/*` | auth-callback Lambda | login and logout |
 | `/api/*` | comments-api Lambda | no caching, Cookie forwarded |
 
-A 403 from `/photos/*` is rewritten to `/login.html`, so a viewer with no
-valid cookies lands on the login page rather than an AWS error.
+A 403 from `/photos/*` is rewritten to `/login.html`.
 
 | file | contents |
 | --- | --- |
@@ -43,7 +43,6 @@ valid cookies lands on the login page rather than an AWS error.
 | `cloudfront.tf` | the distribution and its four behaviours |
 | `lambda.tf` | both functions, their roles, and their function URLs |
 | `outputs.tf` | domain, distribution id, ACM records, Cognito ids |
-| `terraform.tfvars` | committed; project_tag only |
 | `lambda/` | the two Python 3.12 handlers and their requirements |
 
 `build/` and `dist/` are produced by `scripts/build_lambdas.py` and
@@ -82,27 +81,51 @@ directory into `dist/`. Re-run it after changing a handler or a
 
 ```
 cp env.example .env                                 # then edit it
-python scripts/build_lambdas.py
 python scripts/tf.py init
-python scripts/tf.py apply -target=aws_acm_certificate.albums
-python scripts/tf.py output acm_validation_records  # add this CNAME at the registrar
-python scripts/tf.py apply                          # once it resolves
+python scripts/tf.py plan                           # check before creating anything
+python scripts/tf.py cert                           # stage one: the certificate
+                                                    # add the CNAME it prints
+python scripts/tf.py plan                           # once the CNAME resolves
+python scripts/tf.py apply                          # stage two: everything else
 python scripts/tf.py output cloudfront_domain_name  # point your domain here
 ```
 
-The certificate is created on its own first because `terraform output` cannot
-print the validation record until the certificate exists, and the full apply
-blocks waiting for that record.
+`tf.py cert` is stage one: it applies the certificate alone and prints its
+validation record. Add that record at the registrar, wait for it to resolve,
+then run the second apply.
+
+### The two DNS records
+
+Both go in your domain's DNS panel, wherever the zone is hosted -- the
+registrar, or whatever nameservers it points at.
+
+| when | type | host | value |
+| --- | --- | --- | --- |
+| after `tf.py cert` | CNAME | the name from `acm_validation_records` | the value from the same output |
+| after the full apply | CNAME | your subdomain, e.g. `albums` | the `cloudfront_domain_name` output |
+
+ACM prints the validation name fully qualified, ending in a dot:
+
+```
+_a1b2c3d4e5.albums.example.com.
+```
+
+Most panels take only the part in front of the zone and append the rest:
+enter `_a1b2c3d4e5.albums`. Drop the trailing dot unless the panel expects
+one. Paste the value as-is.
+
+Check with `nslookup _a1b2c3d4e5.albums.example.com` before the second apply.
+The apply waits while the certificate is `PENDING_VALIDATION`.
 
 Then:
 
-1. `scripts/deploy_site.sh`
+1. `python scripts/deploy_site.py`
 2. Create Cognito users with `name` and `email`, and add yourself to the
    `admin` group.
 3. Scan and sync -- see `scripts/README.md`.
 
 ## Later applies
 
-`python scripts/tf.py apply` on its own. Re-run `build_lambdas.py` first if a
-handler changed; the zip's hash is what tells Terraform to redeploy the
-function.
+`python scripts/tf.py plan`, then `python scripts/tf.py apply`. Re-run
+`build_lambdas.py` first if a handler changed; the zip's hash is what tells
+Terraform to redeploy the function.
