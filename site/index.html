@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Photo Albums</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<header class="site-header">
+  <a class="home-link" href="#/">Photo Albums</a>
+  <div class="header-right">
+    <span id="who"></span>
+    <a class="text-button" href="/auth/logout">Log out</a>
+  </div>
+</header>
+
+<main id="main">
+
+  <section id="album-list-view" hidden>
+    <div class="controls">
+      <label class="sort">
+        Sort
+        <select id="sort-select">
+          <option value="date-asc">Oldest first</option>
+          <option value="date-desc">Newest first</option>
+          <option value="title">Title A-Z</option>
+        </select>
+      </label>
+      <div id="filter-groups"></div>
+      <button id="clear-filters" class="text-button" hidden>Clear filters</button>
+    </div>
+    <p id="album-count" class="muted"></p>
+    <div id="album-grid" class="album-grid"></div>
+  </section>
+
+  <section id="album-view" hidden>
+    <a class="text-button back" href="#/">All albums</a>
+    <h1 id="album-title"></h1>
+    <p id="album-meta" class="muted"></p>
+    <div id="album-groups"></div>
+  </section>
+
+  <p id="status" class="status" hidden></p>
+
+</main>
+
+<div id="lightbox" class="lightbox" hidden>
+  <button id="lightbox-close" class="lightbox-close" aria-label="Close">&times;</button>
+  <button id="lightbox-prev" class="lightbox-nav prev" aria-label="Previous">&#8249;</button>
+  <button id="lightbox-next" class="lightbox-nav next" aria-label="Next">&#8250;</button>
+  <div class="lightbox-inner">
+    <div class="lightbox-image">
+      <img id="lightbox-img" alt="" />
+    </div>
+    <aside class="lightbox-side">
+      <p id="lightbox-caption" class="muted"></p>
+      <h2>Comments</h2>
+      <p class="hint">Know who's in this photo, or where it was taken? Say so here.</p>
+      <div id="comment-list"></div>
+      <form id="comment-form">
+        <textarea id="comment-body" rows="3" maxlength="2000" placeholder="Add a comment"></textarea>
+        <div class="form-row">
+          <button type="submit" id="comment-submit">Post</button>
+          <span id="comment-error" class="error"></span>
+        </div>
+      </form>
+    </aside>
+  </div>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

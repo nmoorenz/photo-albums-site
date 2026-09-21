@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Log in - Photo Albums</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body class="login-body">
+  <div class="login-panel">
+    <h1>Photo Albums</h1>
+    <p>Scanned family albums. Please log in to look through them.</p>
+    <button id="login-button">Log in</button>
+  </div>
+  <script type="module">
+    import { COGNITO_DOMAIN, COGNITO_CLIENT_ID, REDIRECT_URI } from './config.js';
+    const btn = document.getElementById('login-button');
+    if (!COGNITO_DOMAIN || !COGNITO_CLIENT_ID) {
+      btn.textContent = 'Login is not configured yet';
+      btn.disabled = true;
+    } else {
+      const url = new URL(COGNITO_DOMAIN.replace(/\/$/, '') + '/login');
+      url.searchParams.set('client_id', COGNITO_CLIENT_ID);
+      url.searchParams.set('response_type', 'code');
+      url.searchParams.set('scope', 'openid email profile');
+      url.searchParams.set('redirect_uri', REDIRECT_URI);
+      btn.addEventListener('click', () => { window.location.href = url.toString(); });
+    }
+  </script>
+</body>
+</html>

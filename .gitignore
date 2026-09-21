@@ -1,0 +1,22 @@
+.env
+.dev-comments.json
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# The photos/ folder is kept (via .gitkeep) but everything you put in it --
+# scans, and the two CSVs that describe them -- stays out of the repository.
+photos/*
+!photos/.gitkeep
+
+site/manifest.json
+build/
+
+.terraform/
+*.tfstate
+*.tfstate.backup
+.terraform.lock.hcl
+infrastructure/build/
+infrastructure/dist/

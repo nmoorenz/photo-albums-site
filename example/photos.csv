@@ -1,0 +1,22 @@
+album,file,page,kind,order
+blue-album,IMG_0001.JPG,,cover,1
+blue-album,IMG_0002.JPG,1,page,2
+blue-album,IMG_0003.JPG,1,,3
+blue-album,IMG_0004.JPG,1,,4
+blue-album,IMG_0005.JPG,2,page,5
+blue-album,IMG_0006.JPG,2,,6
+blue-album,IMG_0007.JPG,2,,7
+pinkerton,PICT0101.jpg,,cover,1
+pinkerton,PICT0102.jpg,1,page,2
+pinkerton,PICT0103.jpg,1,,3
+pinkerton,PICT0104.jpg,1,,4
+pinkerton,PICT0105.jpg,2,page,5
+pinkerton,PICT0106.jpg,2,,6
+pinkerton,PICT0107.jpg,2,,7
+green-album,scan 0042.jpg,,cover,1
+green-album,scan 0043.jpg,1,page,2
+green-album,scan 0044.jpg,1,,3
+green-album,scan 0045.jpg,1,,4
+green-album,scan 0046.jpg,2,page,5
+green-album,scan 0047.jpg,2,,6
+green-album,scan 0048.jpg,2,,7
