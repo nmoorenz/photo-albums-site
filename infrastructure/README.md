@@ -114,8 +114,17 @@ Most panels take only the part in front of the zone and append the rest:
 enter `_a1b2c3d4e5.albums`. Drop the trailing dot unless the panel expects
 one. Paste the value as-is.
 
-Check with `nslookup _a1b2c3d4e5.albums.example.com` before the second apply.
-The apply waits while the certificate is `PENDING_VALIDATION`.
+Two checks before the second apply -- DNS first, then ACM:
+
+```powershell
+Resolve-DnsName _a1b2c3d4e5.albums.example.com -Type CNAME
+aws acm list-certificates --region us-east-1 --profile $env:AWS_PROFILE `
+  --query "CertificateSummaryList[?DomainName=='$env:DOMAIN_NAME'].Status"
+```
+
+The record resolves within minutes of adding it; ACM moves from
+`PENDING_VALIDATION` to `ISSUED` within about another 30, and the second
+apply waits on that.
 
 Then:
 
